@@ -2,5 +2,5 @@
 
 - Order of Code Examples
 - `src/Base.hs`
-- `src/Lists.hs`
 - `src/Nats.hs`
+- `src/Lists.hs`

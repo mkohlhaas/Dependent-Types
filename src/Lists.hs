@@ -5,27 +5,28 @@ import Data.Kind
 import Data.Type.Equality
 import Nats
 
-data HList (l ∷ [*]) ∷ * where
+-- singleton list type
+data HList (l ∷ [Type]) ∷ Type where
   HNil ∷ HList '[]
   HCons ∷ t → HList l → HList (t ': l)
 
-type family Length (l ∷ [*]) ∷ Nat where
+type family Length (l ∷ [Type]) ∷ Nat where
   Length '[] = 'Zero
   Length (_' : r) = 'Suc (Length r)
 
-type family (a ∷ [*]) :++: (b ∷ [*]) ∷ [*] where
+type family (a ∷ [Type]) :++: (b ∷ [Type]) ∷ [Type] where
   '[] :++: b = b
   (a : as) :++: b = a : (as :++: b)
 
-type family Reverse (a ∷ [*]) ∷ [*] where
+type family Reverse (a ∷ [Type]) ∷ [Type] where
   Reverse '[] = '[]
   Reverse (a : as) = Reverse as :++: '[a]
 
-type family Filter (f ∷ * → Bool) (l ∷ [*]) ∷ [*] where
+type family Filter (f ∷ Type → Bool) (l ∷ [Type]) ∷ [Type] where
   Filter f '[] = '[]
   Filter f (x : xs) = ConsIf (f x) x (Filter f xs)
 
-type family ConsIf (c ∷ Bool) (x ∷ *) (xs ∷ [*]) ∷ [*] where
+type family ConsIf (c ∷ Bool) (x ∷ Type) (xs ∷ [Type]) ∷ [Type] where
   ConsIf 'True x xs = x ': xs
   ConsIf _ x xs = xs
 
@@ -34,12 +35,12 @@ type family (a ∷ Nat) :⇐: (b ∷ Nat) ∷ Bool where
   'Suc a :⇐: a = 'False
   a :⇐: 'Suc b = a :⇐: b
 
-type family (a ∷ Nat) :!⇐: (b ∷ Nat) ∷ * where
-  a :!⇐: a = *
+type family (a ∷ Nat) :!⇐: (b ∷ Nat) ∷ Type where
+  a :!⇐: a = Type
   a :!⇐: 'Suc b = a :!⇐: b
 
-data SUnit ∷ * → * where
-  SUnit ∷ SUnit *
+data SUnit ∷ Type → Type where
+  SUnit ∷ SUnit Type
 
 (.++.) ∷ HList a → HList b → HList (a :++: b)
 HNil .++. b = b
@@ -63,6 +64,24 @@ sreverse ∷ HList l → HList (Reverse l)
 sreverse HNil = HNil
 sreverse (HCons a as) = sreverse as .++. slist a
 
+---------------
+-- Exercises --
+---------------
+
+--  1. concatNilL :: '[] :++: a :~:  a
+--  2. concatNilR :: HList a -> a :++: '[] :~: a
+--  3. lengthCons :: HList a -> Length (t ': a) :~: 'Suc (Length a)
+--  4. lengthConcat :: HList a -> HList b -> Length a :+: Length b :~: Length (a :++: b)
+--  5. concatAssoc :: forall a b c.  HList a -> HList b -> HList c -> (a :++: b) :++: c :~: a :++: (b :++: c)
+--  6. lengthConcatCommut :: forall a b. HList a -> HList b -> Length (a :++: b) :~: Length (b :++: a)
+--  7. lengthReverse :: HList a -> Length (Reverse a) :~: Length a
+--  8. concatReverse :: forall a b . HList a -> HList b -> Reverse a :++: Reverse b :~: Reverse (b :++: a)
+--  9. consReverse :: forall a t. HList a -> t ': Reverse a :~: Reverse (a :++: '[t])
+-- 10. reverseReverse :: forall a. HList a -> Reverse (Reverse a) :~: a
+
+---------------
+
+{-
 concatNilL ∷ '[] :++: a :~: a
 concatNilL = Refl
 
@@ -171,3 +190,5 @@ reverseReverse (HCons (t ∷ t) (l ∷ HList l)) = s2
     s2 ∷ Reverse (Reverse l :++: '[t]) :~: (t ': l)
     s1 = concatEqL (slist t) indh
     s2 = s1 `transL` consReverse (sreverse l)
+
+-}

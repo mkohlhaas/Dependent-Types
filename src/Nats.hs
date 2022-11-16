@@ -8,9 +8,35 @@ data Nat where
   Suc ∷ Nat → Nat
   deriving (Show, Eq, Ord)
 
-data SNat (n ∷ Nat) where
-  SZero ∷ SNat 'Zero
-  SSuc ∷ SNat n → SNat ('Suc n)
+-- zero
+-- >>> Zero
+-- Zero
+
+-- one
+-- >>> Suc Zero
+-- Suc Zero
+
+-- two
+-- >>> Suc (Suc Zero)
+-- Suc (Suc Zero)
+
+-- three
+-- >>> Suc (Suc (Suc Zero))
+-- Suc (Suc (Suc Zero))
+
+-- >>> :type Zero
+-- Zero ∷ Nat
+
+-- >>> :type Suc
+-- Suc ∷ Nat → Nat
+
+-- >>> :kind 'Suc
+-- 'Suc ∷ Nat → Nat
+
+-- >>> :kind 'Zero
+-- 'Zero ∷ Nat
+
+-- We want to prove: one + one = two!
 
 type N0 = 'Zero
 
@@ -18,45 +44,180 @@ type One = 'Suc N0
 
 type Two = 'Suc One
 
+-- Addition for Nat's (term level).
+(+.) ∷ Nat → Nat → Nat
+Zero +. b = b
+(Suc a) +. b = Suc (a +. b)
+
+infixl 5 +.
+
+-- one + one = two
+-- >>> (Suc Zero) +. (Suc Zero)
+-- Suc (Suc Zero)
+
+-- three + two = five
+-- >>> Suc(Suc(Suc Zero)) +. (Suc(Suc Zero))
+-- Suc (Suc (Suc (Suc (Suc Zero))))
+
+-- Addition (type level) for Nat kinds.
+-- Type families can be seen as functions on types.
 type family (a ∷ Nat) :+: (b ∷ Nat) ∷ Nat where
   'Zero :+: b = b
   'Suc a :+: b = 'Suc (a :+: b)
 
+-- >>> :kind (:+:)
+-- (:+:) ∷ Nat → Nat → Nat
+
+-- one + one = two
+-- >>> :kind! One :+: One
+-- One :+: One ∷ Nat
+-- = 'Suc ('Suc N0)
+
+-- Proof that one + one = two!
 onePlusOne ∷ (One :+: One) :~: Two
 onePlusOne = Refl
 
+-- GHC error: "Couldn't match type ‘n’ with ‘n :+: 'Zero’"
+-- nPlusZero1 ∷ (n :+: 'Zero) :~: n
+-- nPlusZero1 = Refl
+
+-- :+: pattern matches on the left argument, but now we have 'Zero on the right.
+-- Hence the expected way to proceed is to pattern match on `n`.
+-- Unfortunately, we cannot pattern match on types directly so we need to figure something out.
+
+-- The strategy is to define a data type which will serve as a bridge between the terms level and the types level.
+-- using GDAT
+data SNat (n ∷ Nat) where
+  SZero ∷ SNat 'Zero
+  SSuc ∷ SNat n → SNat ('Suc n)
+
+-- For any type n of kind Nat, the type `SNat n` has exactly one term ⇒ SNat is a singleton type.
+
+-- SNat has the same structure as a Nat, but it is INDEXED by a Nat on the type level.
+-- Note that the `n` in the first line is NOT a term of type Nat.
+-- Instead, `n` is a type variable of kind Nat.
+-- With the help of GADTs, we can use the promoted constructors 'Zero and 'Suc to create the desired link between terms and types.
+
+-- >>> :kind SNat
+-- SNat ∷ Nat → Type
+
+-- We can use the singleton type SNat to pattern match on types of kind Nat.
+-- nPlusZero ∷ SNat n → (n :+: 'Zero) :~: n
+-- nPlusZero SZero = Refl
+-- nPlusZero (SSuc n) = congSuc (nPlusZero n)
+
+-- n + 0 = n
 nPlusZero ∷ SNat n → (n :+: 'Zero) :~: n
 nPlusZero SZero = Refl
-nPlusZero (SSuc m) = congSuc (nPlusZero m)
+nPlusZero (SSuc n) = cong (nPlusZero n)
 
-type family (a ∷ Nat) :*: (b ∷ Nat) ∷ Nat where
-  'Zero :*: b = 'Zero
-  'Suc a :*: b = b :+: (a :*: b) -- Requires UndecidableInstances
+-- We want to prove some theorem.
+someTheoremm ∷ SNat a → SNat b → (a :+: b) :+: 'Zero :~: (a :+: b)
+someTheoremm a b = nPlusZero (a .+. b)
 
-type family (a ∷ Nat) :^: (b ∷ Nat) ∷ Nat where
-  a :^: 'Zero = 'Suc 'Zero
-  a :^: 'Suc b = a :*: (a :^: b) -- Requires UndecidableInstances
+-- It is clear that the strategy should be to instantiate the n in the lemma nPlusZero as a :+: b.
+-- But then we should provide an argument of type `SNat (a :+: b)`.
+-- We can achieve that by implementing addition for the type SNat.
 
+-- addition term level (for SNats)
 (.+.) ∷ SNat a → SNat b → SNat (a :+: b)
 (.+.) SZero b = b
 (.+.) (SSuc n) b = SSuc (n .+. b)
 
 infixl 9 .+.
 
+-- multiplication term level (for SNats)
 (.*.) ∷ SNat a → SNat b → SNat (a :*: b)
 (.*.) SZero _ = SZero
 (.*.) (SSuc a) b = b .+. (a .*. b)
 
 infixl 9 .*.
 
+-- exponentiation term level (for SNats)
 (.^.) ∷ SNat a → SNat b → SNat (a :^: b)
 (.^.) _ SZero = SSuc SZero
 (.^.) a (SSuc b) = a .*. (a .^. b)
 
 infixl 9 .^.
 
-congSuc ∷ a :~: b → 'Suc a :~: 'Suc b
-congSuc = cong
+-- multiplication (type level)
+type family (a ∷ Nat) :*: (b ∷ Nat) ∷ Nat where
+  'Zero :*: b = 'Zero
+  'Suc a :*: b = b :+: (a :*: b)
+
+-- exponentiation (type level)
+type family (a ∷ Nat) :^: (b ∷ Nat) ∷ Nat where
+  a :^: 'Zero = 'Suc 'Zero
+  a :^: 'Suc b = a :*: (a :^: b)
+
+---------------
+-- Exercises --
+---------------
+
+--  1. plusSucR ∷ SNat a → SNat b → (a :+: 'Suc b) :~: 'Suc (a :+: b)
+plusSucR ∷ SNat a → SNat b → (a :+: 'Suc b) :~: 'Suc (a :+: b)
+plusSucR SZero _  = Refl
+plusSucR (SSuc a) b  = cong (plusSucR a b)
+
+--  2. plusAssoc ∷ SNat a → SNat b → SNat c → (a :+: b) :+: c :~: a :+: (b :+: c)
+plusAssoc ∷ SNat a → SNat b → SNat c → (a :+: b) :+: c :~: a :+: (b :+: c)
+plusAssoc SZero _ _ = Refl
+plusAssoc (SSuc a) b c = cong (plusAssoc a b c)
+
+--  3. plusCommut ∷ SNat a → SNat b → (a :+: b) :~: (b :+: a)
+plusCommut ∷ SNat a → SNat b → (a :+: b) :~: (b :+: a)
+plusCommut SZero b = sym (plusZeroR b)
+plusCommut (SSuc a) b = _1 `trans` _2
+  where
+    fu1 ∷ (a' :+: b') :~: (b' :+: a')
+    fu1 = plusCommut a b ∷ _3
+
+-- _ ∷ (b :+: 'Suc a) :~: 'Suc (a :+: b)
+
+-- plusCommut ∷ ∀ a b. SNat a → SNat b → (a :+: b) :~: (b :+: a)
+-- plusCommut SZero b = sym (plusZeroR b)
+-- plusCommut (SSuc (pa ∷ SNat pa)) b = cong indh `trans` sym (plusSucR b pa)
+--   where
+--     indh ∷ (pa :+: b) :~: (b :+: pa)
+--     indh = plusCommut pa b
+
+-- >>> :type trans
+-- trans
+--   ∷ ∀ k (a ∷ k) (b ∷ k) (c ∷ k).
+--      (a :~: b)
+--    → (b :~: c)
+--    →  a :~: c
+
+-- _ ∷ ('Suc (n :+: b) :~: 'Suc (b :+: n))
+--   → ('Suc (b :+: n) :~: (b :+: 'Suc n))
+--   →  'Suc (n :+: b) :~: (b :+: 'Suc n)
+
+-- >>> :type plusCommut (SSuc SZero) (SSuc (SSuc SZero))
+-- plusCommut (SSuc SZero) (SSuc (SSuc SZero)) ∷ 'Suc ('Suc ('Suc 'Zero)) :~: 'Suc ('Suc ('Suc 'Zero))
+
+plusZeroR ∷ SNat a → (a :+: 'Zero) :~: a
+plusZeroR SZero = Refl
+plusZeroR (SSuc a) = cong (plusZeroR a)
+
+-- _ ∷ (a :+: 'Suc b) :~: (b :+: 'Suc a)
+-- _ ∷ (a :+: 'Suc b) :~: ('Suc a :+: b)
+
+--  4. prodZeroL ∷ SNat n → 'Zero :*: n :~: 'Zero
+--  5. prodZeroR ∷ SNat a → (a :*: 'Zero) :~: 'Zero
+--  6. prodOneL ∷ SNat sn → (One :*: sn) :~: sn
+--  7. prodOneR ∷ SNat sn → (sn :*: One) :~: sn
+--  8. prodSucL ∷ SNat a → SNat b → ('Suc a :*: b) :~: b :+: (a :*: b)
+--  9. prodSucR ∷ SNat a → SNat b → (a :*: 'Suc b) :~: a :+: (a :*: b)
+-- 10. prodDistribR ∷ SNat a → SNat b → SNat c → (a :+: b) :*: c :~: (a :*: c) :+: (b :*: c)
+-- 11. prodDistribL ∷ SNat a → SNat b → SNat c → a :*: (b :+: c) :~: (a :*: b) :+: (a :*: c)
+-- 12. prodAssoc ∷ SNat a → SNat b → SNat c → (a :*: b) :*: c :~: a :*: (b :*: c)
+-- 13. prodCommut ∷ SNat a → SNat b → (a :*: b) :~: (b :*: a)
+-- 14. powerZero ∷ a :^: 'Zero :~: One
+-- 15. powerOne ∷ SNat a → a :^: One :~: a
+-- 16. prodPower ∷ SNat a → SNat b → SNat c → (a :^: b) :*: (a :^: c) :~: a :^: (b :+: c)
+-- 17. powerProd ∷ SNat a → SNat b → SNat c → (a :^: c) :*: (b :^: c) :~: (a :*: b) :^: c
+
+{-
 
 plusZeroL ∷ ('Zero :+: b) :~: b
 plusZeroL = Refl
@@ -286,3 +447,5 @@ powerPower a b (SSuc (n ∷ SNat n)) = s3
     s1 = prodEqL (a .^. b) indh
     s2 = s1 `trans` prodPower a b (b .*. n)
     s3 = powerTransExp a s2 (sym (prodSucR b n))
+
+-}
