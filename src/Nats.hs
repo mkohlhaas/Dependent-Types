@@ -1,3 +1,9 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Nats where
 
 import Base
@@ -7,6 +13,10 @@ data Nat where
   Zero ∷ Nat
   Suc ∷ Nat → Nat
   deriving (Show, Eq, Ord)
+
+-----------------------------------
+-- Creating Numbers (Term Level) --
+-----------------------------------
 
 -- zero
 -- >>> Zero
@@ -24,6 +34,10 @@ data Nat where
 -- >>> Suc (Suc (Suc Zero))
 -- Suc (Suc (Suc Zero))
 
+---------------
+-- DataKinds --
+---------------
+
 -- >>> :type Zero
 -- Zero ∷ Nat
 
@@ -36,15 +50,32 @@ data Nat where
 -- >>> :kind 'Zero
 -- 'Zero ∷ Nat
 
--- We want to prove: one + one = two!
-
+-- N0 is type alias with kind Nat without a data constructor.
 type N0 = 'Zero
+
+-- >>> :kind N0
+-- N0 ∷ Nat
+
+-- >>> :type N0
+-- Data constructor not in scope: N0
 
 type One = 'Suc N0
 
 type Two = 'Suc One
 
+-----------
+-- Proof --
+-----------
+
+----------------
+-- Term Level --
+----------------
+
+-- We want to prove: one + one = two!
+
+-- For comparison.
 -- Addition for Nat's (term level).
+-- https://en.wikipedia.org/wiki/Peano_axioms#Addition
 (+.) ∷ Nat → Nat → Nat
 Zero +. b = b
 (Suc a) +. b = Suc (a +. b)
@@ -59,8 +90,13 @@ infixl 5 +.
 -- >>> Suc(Suc(Suc Zero)) +. (Suc(Suc Zero))
 -- Suc (Suc (Suc (Suc (Suc Zero))))
 
+----------------
+-- Type Level --
+----------------
+
+-- Type families can be seen as functions on types!
+
 -- Addition (type level) for Nat kinds.
--- Type families can be seen as functions on types.
 type family (a ∷ Nat) :+: (b ∷ Nat) ∷ Nat where
   'Zero :+: b = b
   'Suc a :+: b = 'Suc (a :+: b)
@@ -85,31 +121,63 @@ onePlusOne = Refl
 -- Hence the expected way to proceed is to pattern match on `n`.
 -- Unfortunately, we cannot pattern match on types directly so we need to figure something out.
 
--- The strategy is to define a data type which will serve as a bridge between the terms level and the types level.
--- using GDAT
+----------------
+-- Singletons --
+----------------
+
+-- One type, one term.
+-- If you know the type, you know the term and vice versa.
+
+-- SNat = Singleton Nat
 data SNat (n ∷ Nat) where
   SZero ∷ SNat 'Zero
   SSuc ∷ SNat n → SNat ('Suc n)
 
--- For any type n of kind Nat, the type `SNat n` has exactly one term ⇒ SNat is a singleton type.
+-- >>> :kind SNat
+-- SNat ∷ Nat → Type
+
+-----------------------------------
+-- Creating Numbers (Type Level) --
+-----------------------------------
+
+-- For any type `n` of kind Nat, the type `SNat n` has exactly one term ⇒ SNat is a singleton type.
 
 -- SNat has the same structure as a Nat, but it is INDEXED by a Nat on the type level.
 -- Note that the `n` in the first line is NOT a term of type Nat.
 -- Instead, `n` is a type variable of kind Nat.
 -- With the help of GADTs, we can use the promoted constructors 'Zero and 'Suc to create the desired link between terms and types.
 
--- >>> :kind SNat
--- SNat ∷ Nat → Type
+-- >>> :kind! SZero
+-- SZero ∷ SNat 'Zero
+-- = 'SZero
+
+-- >>> :kind! (SSuc SZero)
+-- (SSuc SZero) ∷ SNat ('Suc 'Zero)
+-- = 'SSuc 'SZero
+
+-- >>> :kind! (SSuc (SSuc SZero))
+-- (SSuc (SSuc SZero)) ∷ SNat ('Suc ('Suc 'Zero))
+-- = 'SSuc ('SSuc 'SZero)
+
+-------------------------------
+-- Pattern Matching on Types --
+-------------------------------
 
 -- We can use the singleton type SNat to pattern match on types of kind Nat.
--- nPlusZero ∷ SNat n → (n :+: 'Zero) :~: n
--- nPlusZero SZero = Refl
--- nPlusZero (SSuc n) = congSuc (nPlusZero n)
 
 -- n + 0 = n
+-- nPlusZero ∷ SNat n → (n :+: 'Zero) :~: n
+-- nPlusZero SZero = _
+-- nPlusZero (SSuc n) = _
+
+-- ⇒
 nPlusZero ∷ SNat n → (n :+: 'Zero) :~: n
 nPlusZero SZero = Refl
 nPlusZero (SSuc n) = cong (nPlusZero n)
+
+---------------------
+-- Theorem Proving --
+---------------------
 
 -- We want to prove some theorem.
 someTheoremm ∷ SNat a → SNat b → (a :+: b) :+: 'Zero :~: (a :+: b)
@@ -165,12 +233,12 @@ plusAssoc SZero _ _ = Refl
 plusAssoc (SSuc a) b c = cong (plusAssoc a b c)
 
 --  3. plusCommut ∷ SNat a → SNat b → (a :+: b) :~: (b :+: a)
-plusCommut ∷ SNat a → SNat b → (a :+: b) :~: (b :+: a)
-plusCommut SZero b = sym (plusZeroR b)
-plusCommut (SSuc a) b = _1 `trans` _2
-  where
-    fu1 ∷ (a' :+: b') :~: (b' :+: a')
-    fu1 = plusCommut a b ∷ _3
+-- plusCommut ∷ SNat a → SNat b → (a :+: b) :~: (b :+: a)
+-- plusCommut SZero b = sym (plusZeroR b)
+-- plusCommut (SSuc a) b = _1 `trans` _2
+--   where
+--     fu1 ∷ (a' :+: b') :~: (b' :+: a')
+--     fu1 = plusCommut a b ∷ _3
 
 -- _ ∷ (b :+: 'Suc a) :~: 'Suc (a :+: b)
 

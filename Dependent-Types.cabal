@@ -16,9 +16,6 @@ library
 
     hs-source-dirs:     src
     default-language:   Haskell2010
-    default-extensions:
-        DataKinds FlexibleContexts GADTs NoStarIsType PolyKinds ScopedTypeVariables TypeFamilies
-        TypeOperators UndecidableInstances UnicodeSyntax
-
+    default-extensions: NoStarIsType UnicodeSyntax
     ghc-options:        -Wunticked-promoted-constructors
     build-depends:      base ^>=4.14.3.0
