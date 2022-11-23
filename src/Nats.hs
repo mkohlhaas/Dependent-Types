@@ -1,5 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -7,6 +9,7 @@
 module Nats where
 
 import Base
+import Control.Category
 import Data.Type.Equality
 
 data Nat where
@@ -222,68 +225,126 @@ type family (a ∷ Nat) :^: (b ∷ Nat) ∷ Nat where
 -- Exercises --
 ---------------
 
+-- 1.  plusSucR ∷ ∀ a b. SNat a → SNat b → (a :+: 'Suc b) :~: 'Suc (a :+: b)
+-- 2.  plusAssoc ∷ ∀ a b c. SNat a → SNat b → SNat c → (a :+: b) :+: c :~: a :+: (b :+: c)
+-- 3.  plusCommut ∷ ∀ a b. SNat a → SNat b → (a :+: b) :~: (b :+: a)
+-- 4.  plusZeroL ∷ SNat a → ('Zero :+: a) :~: a
+-- 5.  plusZeroR ∷ SNat a → (a :+: 'Zero) :~: a
+-- 6.  prodZeroL ∷ SNat a → 'Zero :*: a :~: 'Zero
+-- 7.  prodZeroR ∷ SNat a → (a :*: 'Zero) :~: 'Zero
+-- 8.  prodOneL ∷ SNat a → (One :*: a) :~: a
+-- 9.  prodOneR ∷ SNat a → (a :*: One) :~: a
+-- 10. prodSucL ∷ ∀ a b. SNat a → SNat b → ('Suc a :*: b) :~: b :+: (a :*: b)
+-- 11. prodSucR ∷ ∀ a b. SNat a → SNat b → (a :*: 'Suc b) :~: a :+: (a :*: b)
+-- 12. prodDistribR ∷ ∀ a b c. SNat a → SNat b → SNat c → (a :+: b) :*: c :~: (a :*: c) :+: (b :*: c)
+-- 13. prodDistribL ∷ ∀ a b c. SNat a → SNat b → SNat c → a :*: (b :+: c) :~: (a :*: b) :+: (a :*: c)
+-- 14. prodAssoc ∷ ∀ a b c. SNat a → SNat b → SNat c → (a :*: b) :*: c :~: a :*: (b :*: c)
+-- 15. prodCommut ∷ ∀ a b. SNat a → SNat b → (a :*: b) :~: (b :*: a)
+-- 16. powerZero ∷ a :^: 'Zero :~: One
+-- 17. powerOne ∷ SNat a → a :^: One :~: a
+-- 18. prodPower ∷ ∀ a b c. SNat a → SNat b → SNat c → (a :^: b) :*: (a :^: c) :~: a :^: (b :+: c)
+-- 19. powerProd ∷ ∀ a b c. SNat a → SNat b → SNat c → (a :^: c) :*: (b :^: c) :~: (a :*: b) :^: c
+
+---------------
+-- Solutions --
+---------------
+
 --  1. plusSucR ∷ SNat a → SNat b → (a :+: 'Suc b) :~: 'Suc (a :+: b)
+
 plusSucR ∷ SNat a → SNat b → (a :+: 'Suc b) :~: 'Suc (a :+: b)
-plusSucR SZero _  = Refl
-plusSucR (SSuc a) b  = cong (plusSucR a b)
+plusSucR SZero _ = Refl
+plusSucR (SSuc a) b = cong (plusSucR a b)
 
 --  2. plusAssoc ∷ SNat a → SNat b → SNat c → (a :+: b) :+: c :~: a :+: (b :+: c)
+
 plusAssoc ∷ SNat a → SNat b → SNat c → (a :+: b) :+: c :~: a :+: (b :+: c)
 plusAssoc SZero _ _ = Refl
 plusAssoc (SSuc a) b c = cong (plusAssoc a b c)
 
 --  3. plusCommut ∷ SNat a → SNat b → (a :+: b) :~: (b :+: a)
--- plusCommut ∷ SNat a → SNat b → (a :+: b) :~: (b :+: a)
--- plusCommut SZero b = sym (plusZeroR b)
--- plusCommut (SSuc a) b = _1 `trans` _2
---   where
---     fu1 ∷ (a' :+: b') :~: (b' :+: a')
---     fu1 = plusCommut a b ∷ _3
 
--- _ ∷ (b :+: 'Suc a) :~: 'Suc (a :+: b)
+plusCommut ∷ ∀ a b. SNat a → SNat b → (a :+: b) :~: (b :+: a)
+plusCommut SZero b = sym (nPlusZero b)
+plusCommut (SSuc a) b = cong (plusCommut a b) >>> sym (plusSucR b a)
 
--- plusCommut ∷ ∀ a b. SNat a → SNat b → (a :+: b) :~: (b :+: a)
--- plusCommut SZero b = sym (plusZeroR b)
--- plusCommut (SSuc (pa ∷ SNat pa)) b = cong indh `trans` sym (plusSucR b pa)
---   where
---     indh ∷ (pa :+: b) :~: (b :+: pa)
---     indh = plusCommut pa b
+---------------------------------
+-- Steps finding this solution --
+---------------------------------
 
--- >>> :type trans
--- trans
---   ∷ ∀ k (a ∷ k) (b ∷ k) (c ∷ k).
---      (a :~: b)
---    → (b :~: c)
---    →  a :~: c
+----------------------------------------------------
+-- I. Pattern: 'Suc (...) :~:      (...) ⇒ cong _ >>> _
+--    Pattern:      (...) :~: 'Suc (...) ⇒      _ <<< cong _
+--    Pattern: 'Suc (...) :~: 'Suc (...) ⇒ cong _
 
--- _ ∷ ('Suc (n :+: b) :~: 'Suc (b :+: n))
---   → ('Suc (b :+: n) :~: (b :+: 'Suc n))
---   →  'Suc (n :+: b) :~: (b :+: 'Suc n)
+-- plusCommut (SSuc a) b = _
+-- _ ∷ 'Suc (n :+: b) :~: (b :+: 'Suc n)
 
--- >>> :type plusCommut (SSuc SZero) (SSuc (SSuc SZero))
--- plusCommut (SSuc SZero) (SSuc (SSuc SZero)) ∷ 'Suc ('Suc ('Suc 'Zero)) :~: 'Suc ('Suc ('Suc 'Zero))
+----------------------------------------------------
+-- II. Pattern: 'Suc (...) :~: (... 'Suc) ⇒ plusSucR
+
+-- plusCommut (SSuc a) b = cong _1 >>> _2
+-- _1 ∷ (n :+: b) :~: b0
+-- _2 ∷ 'Suc b0 :~: (b :+: 'Suc n)
+
+----------------------------------------------------
+-- III. Recursive Case
+
+-- plusCommut (SSuc a) b = cong _ >>> sym (plusSucR b a)
+-- _ ∷ (n :+: b) :~: (b :+: n)
+
+----------------------------------------------------
+-- IV. Solution
+
+-- plusCommut (SSuc a') b = cong (plusCommut a' b) >>> sym (plusSucR b a')
+
+----------------------------------------------------
+
+-- 4. plusZeroL ∷ SNat a → ('Zero :+: a) :~: a
+
+plusZeroL ∷ SNat a → ('Zero :+: a) :~: a
+plusZeroL _ = Refl
+
+-- 5. plusZeroR ∷ SNat a → (a :+: 'Zero) :~: a
 
 plusZeroR ∷ SNat a → (a :+: 'Zero) :~: a
 plusZeroR SZero = Refl
 plusZeroR (SSuc a) = cong (plusZeroR a)
 
--- _ ∷ (a :+: 'Suc b) :~: (b :+: 'Suc a)
--- _ ∷ (a :+: 'Suc b) :~: ('Suc a :+: b)
+-- 6. prodZeroL ∷ SNat a → 'Zero :*: a :~: 'Zero
 
---  4. prodZeroL ∷ SNat n → 'Zero :*: n :~: 'Zero
---  5. prodZeroR ∷ SNat a → (a :*: 'Zero) :~: 'Zero
---  6. prodOneL ∷ SNat sn → (One :*: sn) :~: sn
---  7. prodOneR ∷ SNat sn → (sn :*: One) :~: sn
---  8. prodSucL ∷ SNat a → SNat b → ('Suc a :*: b) :~: b :+: (a :*: b)
---  9. prodSucR ∷ SNat a → SNat b → (a :*: 'Suc b) :~: a :+: (a :*: b)
--- 10. prodDistribR ∷ SNat a → SNat b → SNat c → (a :+: b) :*: c :~: (a :*: c) :+: (b :*: c)
--- 11. prodDistribL ∷ SNat a → SNat b → SNat c → a :*: (b :+: c) :~: (a :*: b) :+: (a :*: c)
--- 12. prodAssoc ∷ SNat a → SNat b → SNat c → (a :*: b) :*: c :~: a :*: (b :*: c)
--- 13. prodCommut ∷ SNat a → SNat b → (a :*: b) :~: (b :*: a)
--- 14. powerZero ∷ a :^: 'Zero :~: One
--- 15. powerOne ∷ SNat a → a :^: One :~: a
--- 16. prodPower ∷ SNat a → SNat b → SNat c → (a :^: b) :*: (a :^: c) :~: a :^: (b :+: c)
--- 17. powerProd ∷ SNat a → SNat b → SNat c → (a :^: c) :*: (b :^: c) :~: (a :*: b) :^: c
+prodZeroL ∷ SNat a → 'Zero :*: a :~: 'Zero
+prodZeroL _ = Refl
+
+-- 7. prodZeroR ∷ SNat a → (a :*: 'Zero) :~: 'Zero
+
+prodZeroR ∷ SNat a → (a :*: 'Zero) :~: 'Zero
+prodZeroR SZero = Refl
+prodZeroR (SSuc a) = prodZeroR a
+
+-- 8. prodOneL ∷ SNat a → (One :*: a) :~: a
+
+prodOneL ∷ SNat a → (One :*: a) :~: a
+prodOneL SZero = Refl
+prodOneL (SSuc a) = cong (plusZeroR a)
+
+-- 9. prodOneR ∷ SNat a → (a :*: One) :~: a
+
+prodOneR ∷ SNat a → (a :*: One) :~: a
+prodOneR SZero = Refl
+prodOneR (SSuc a) = cong (prodOneR a)
+
+-- 10. prodSucL ∷ ∀ a b. SNat a → SNat b → ('Suc a :*: b) :~: b :+: (a :*: b)
+prodSucL ∷ ∀ a b. SNat a → SNat b → ('Suc a :*: b) :~: b :+: (a :*: b)
+prodSucL _ _ = Refl
+
+-- TODO
+-- 11. prodSucR ∷ ∀ a b. SNat a → SNat b → (a :*: 'Suc b) :~: a :+: (a :*: b)
+
+-- prodSucR ∷ ∀ a b. SNat a → SNat b → (a :*: 'Suc b) :~: a :+: (a :*: b)
+-- prodSucR SZero b = Refl
+-- prodSucR (SSuc a) b = cong _
+
+-- plusSucR ∷ SNat a → SNat b → (a :+: 'Suc b) :~: 'Suc (a :+: b)
 
 {-
 
